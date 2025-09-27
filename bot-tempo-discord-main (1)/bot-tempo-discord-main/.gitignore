@@ -1,0 +1,11 @@
+# Segredos e Banco de Dados
+.env
+data.db
+
+# Arquivos do Python
+__pycache__/
+*.pyc
+venv/
+
+# Dependências (se você tiver a pasta)
+ffmpeg/
