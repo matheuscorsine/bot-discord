@@ -10,7 +10,7 @@ BOT_PREFIX =  os.getenv("BOT_PREFIX", "!")
 #caminhos dos arquivos e diretórios
 DB_PATH = os.getenv("DB_PATH", "database.db")#caminho pro DbSql
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets") #pasta das fontes e imgs
-GOAL_SONG_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "goal_song.mp3") #caminho da musica !agro
+GOAL_SONG_LOCAL = os.path.join(ASSETS_DIR, "song", "goal_song.mp3") #caminho da musica !agro
 
 #fuso horário
 try:
