@@ -131,6 +131,7 @@ def gerar_stats_card(username, total_seconds, current_seconds, avatar_bytes=None
         percent_text = f"{int(progress * 100)}%"
         pct_x = bar_x + bar_width - inner_px - int(w * 0.012)
         pct_y = bar_y + ba_height // 2
+        pct_y = bar_y + bar_height // 2
         draw.text((pct_x, pct_y), percent_text, font=goal_font, fill= TEXT_COLOR, anchor="rm")
 
     buf = BytesIO()
