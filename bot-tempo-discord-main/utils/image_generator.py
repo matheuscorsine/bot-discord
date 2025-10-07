@@ -136,4 +136,5 @@ def gerar_stats_card(username, total_seconds, current_seconds, avatar_bytes=None
     buf = BytesIO()
     base.save(buf, format="PNG")
     buf.seak(0)
-    return buf 
+    return buf
+#def gerar leaderboard card
