@@ -227,3 +227,24 @@ async def set_last_reset(guild_id, dt: datetime):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("INSERT OR REPLACE INTO reset_state (guild_id,last_reset) VALUES (?,?)", (guild_id, dt.isoformat()))
         await db.commit()
+
+async def get_rank(user_id, guild_id):
+    """Consulta o banco de dados para encontrar a posição (rank) de um usuário com base no tempo total."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Pede todos os usuários da guilda, ordenados do maior tempo para o menor
+        cur = await db.execute("SELECT user_id FROM total_times WHERE guild_id=? ORDER BY total_seconds DESC", (guild_id,))
+        rows = await cur.fetchall()
+        # Itera sobre os resultados para encontrar a posição do usuário solicitado
+        for i, r in enumerate(rows, start=1):
+            if r[0] == user_id:
+                return i # Retorna a posição (rank)
+    return None # Retorna None se o usuário não estiver no ranking
+
+async def update_goal_reset_flag(guild_id: int, goal_id: int, reset_flag: bool):
+    """Atualiza a propriedade 'reset_on_weekly' de uma meta específica."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Converte o booleano (True/False) para inteiro (1/0) para salvar no DB
+        flag_as_int = 1 if reset_flag else 0
+        await db.execute("UPDATE goals SET reset_on_weekly=? WHERE guild_id=? AND id=?",
+                         (flag_as_int, guild_id, goal_id))
+        await db.commit()

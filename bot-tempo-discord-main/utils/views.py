@@ -1,5 +1,3 @@
-# Caminho: utils/views.py
-
 import discord
 import asyncio
 
