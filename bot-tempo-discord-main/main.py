@@ -1,22 +1,31 @@
 import asyncio
+import logging
 import aiohttp
+from config import TOKEN
+from core.database import init_db
 from core.bot_setup import BotInitializer
+
+#configura um log básico para ver os eventos do discord.py no console
+logging.basicConfig(level=logging.INFO)
 
 async def main():
     """
-    Ponto de entrada principal para inicializar e rodar o bot.
+    função principal que inicializa o banco de dados e o bot
     """
-    # Cria uma sessão aiohttp global para ser usada em todo o bot
+
+    #garante que as tabelas do banco de dados existam antes de tudo
+    await init_db()
+
+    #cria uma sessão aiohttp que será usada pelo bot para downloads
+    #o 'async with' garante que a sessão seja fechada corretamente no final
     async with aiohttp.ClientSession() as session:
-        # Inicializa o bot, passando a sessão http
-        bot_initializer = BotInitializer(http_session=session)
-        
-        # Inicia o processo do bot
-        await bot_initializer.run()
+        #cria a instância principal do bot, passando a sessão criada
+        bot_runner = BotInitializer(http_session=session)
+
+        #inicia o bot e lida com o desligamento 
+        await bot_runner.run()
 
 if __name__ == "__main__":
-    try:
-        # Executa a função main usando o loop de eventos do asyncio
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Bot encerrado pelo usuário.")
+    # Executa a função principal do bot
+    #o tratamento de keyboardInterrupt está na função main em bot_setup.py
+    asyncio.run(main())

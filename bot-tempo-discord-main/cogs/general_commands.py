@@ -3,19 +3,19 @@ from discord.ext import commands
 import asyncio
 import aiosqlite
 
-from ..core.database import (
+from core.database import (
     total_time, current_session_time, get_rank, list_goals, has_awarded
 )
-from ..utils.helpers import fetch_avatar_bytes
-from ..utils.image_generator import gerar_stats_card, gerar_leaderboard_card
-from ..utils.views import RankingView
-from ..config import DB_PATH, BOT_PREFIX
+from utils.helpers import fetch_avatar_bytes
+from utils.image_generator import gerar_stats_card, gerar_leaderboard_card
+from utils.views import RankingView
+from config import DB_PATH, BOT_PREFIX
 
 class GeneralCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="tempo")
+    @commands.command(name="tempo", aliases=['t'])
     async def tempo_cmd(self, ctx, user: discord.Member = None):
         """Mostra o cartão de estatísticas de tempo de um usuário."""
         # Se nenhum usuário for mencionado, usa o autor do comando
@@ -52,7 +52,7 @@ class GeneralCommands(commands.Cog):
             await ctx.reply("Erro ao gerar o cartão de tempo.", mention_author=True)
             print(f"Erro no !tempo: {e}")
 
-    @commands.command(name="top_tempo", aliases=['top_time', 'top_ranking'])
+    @commands.command(name="top_tempo", aliases=['top_time', 'top_ranking', 'top'])
     async def top_tempo_cmd(self, ctx):
         """Exibe o ranking de tempo em chamada do servidor."""
         # Conecta ao DB para buscar os dados do ranking

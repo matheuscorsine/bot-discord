@@ -4,8 +4,8 @@ import os
 import traceback
 
 from config import TOKEN, BOT_PREFIX
-from .database import init_db, is_channel_prohibited
-from .scheduler import weekly_reset_scheduler
+from core.database import init_db, is_channel_prohibited
+from core.scheduler import weekly_reset_scheduler
 
 class BotInitializer:
     """

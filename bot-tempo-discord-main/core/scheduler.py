@@ -6,7 +6,7 @@ import aiosqlite
 
 # Importa as configurações e funções de banco de dados necessárias
 from config import DB_PATH, LOCAL_TZ
-from .database import get_reset_config, get_last_reset, set_last_reset, list_goals, get_log_channel
+from core.database import get_reset_config, get_last_reset, set_last_reset, list_goals, get_log_channel
 
 # Dicionário auxiliar para converter nomes de dias em números (0=Segunda, 6=Domingo)
 _DIAS = {"seg":0,"ter":1,"qua":2,"qui":3,"sex":4,"sab":5,"dom":6}

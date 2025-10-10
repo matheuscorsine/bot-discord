@@ -210,7 +210,7 @@ async def get_reset_config(guild_id):
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("SELECT weekday,hour,minute FROM weekly_reset_config WHERE guild_id=?", (guild_id,))
         row = await cur.fetchone()
-        return (int(row[0]), int(row[1]), int(row[2])) if row else (None, None, None)
+        return (int(row[0]), int(row[1]), int(row[2])) if row else (0, 0, 0)
 
 async def get_last_reset(guild_id):
     """Obtém a data e hora do último reset semanal executado."""

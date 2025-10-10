@@ -4,7 +4,7 @@ from io import BytesIO
 import requests
 
 #importa a variável de configuração e as funções auxiliares
-from ..config import ASSETS_DIR
+from config import ASSETS_DIR
 from .helpers import (
     _load_font_prefer, fmt_hms, _truncate, 
     human_hours_minutes, _resize_and_crop_square
@@ -132,7 +132,7 @@ def gerar_stats_card(username, total_seconds, current_seconds, avatar_bytes=None
 
     buf = BytesIO()
     base.save(buf, format="PNG")
-    buf.seak(0)
+    buf.seek(0)
     return buf
 
 def gerar_leaderboard_card(rows, guild= None, page: int = 1):

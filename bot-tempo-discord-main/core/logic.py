@@ -3,7 +3,7 @@ import traceback
 import aiosqlite
 
 # Importa as funções do banco de dados
-from .database import list_goals, has_awarded, mark_awarded, get_log_channel
+from core.database import list_goals, has_awarded, mark_awarded, get_log_channel
 # Importa as configurações e helpers necessários
 from config import DB_PATH
 from utils.helpers import human_hours_minutes
