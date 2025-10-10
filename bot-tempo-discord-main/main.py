@@ -1,8 +1,5 @@
 import asyncio
-import os
 import aiohttp
-
-
 from core.bot_setup import BotInitializer
 
 async def main():

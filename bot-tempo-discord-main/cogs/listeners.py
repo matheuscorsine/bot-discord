@@ -5,14 +5,14 @@ from datetime import datetime
 import asyncio
 
 # Importações dos módulos
-from core.database import (
+from ..core.database import (
     end_session, total_time, start_session, current_session_time, get_rank,
     list_goals, has_awarded, get_log_channel
 )
-from core.logic import check_and_award_goals_for_user
-from utils.helpers import now_iso_utc, fetch_avatar_bytes, fmt_hms
-from utils.image_generator import gerar_stats_card
-from config import CALLCARD_UPDATE_INTERVAL
+from ..core.logic import check_and_award_goals_for_user
+from ..utils.helpers import now_iso_utc, fetch_avatar_bytes, fmt_hms
+from ..utils.image_generator import gerar_stats_card
+from ..config import CALLCARD_UPDATE_INTERVAL
 
 class ListenerCog(commands.Cog):
     def __init__(self, bot):

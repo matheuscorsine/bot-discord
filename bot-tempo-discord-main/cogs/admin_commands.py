@@ -1,17 +1,15 @@
-# Caminho: cogs/admin_commands.py
-
 import discord
 from discord.ext import commands
 import re
 import traceback
 import asyncio
 
-from ..config import BOT_PREFIX
-from ..core.database import (
+from config import BOT_PREFIX
+from core.database import (
     set_log_channel, add_goal, remove_goal, list_goals, get_goal, mark_awarded,
     set_reset_config, get_reset_config, total_time, current_session_time,
     add_prohibited_channel, remove_prohibited_channel, list_prohibited_channels,
-    get_awarded_users, update_goal_reset_flag
+    get_awarded_users, update_goal_reset_flag, get_log_channel
 )
 from ..core.scheduler import _weekly_reset_run_for_guild, _parse_day
 from ..utils.helpers import fmt_hms, human_hours_minutes

@@ -248,3 +248,11 @@ async def update_goal_reset_flag(guild_id: int, goal_id: int, reset_flag: bool):
         await db.execute("UPDATE goals SET reset_on_weekly=? WHERE guild_id=? AND id=?",
                          (flag_as_int, guild_id, goal_id))
         await db.commit()
+
+async def get_awarded_users(guild_id: int, goal_id: int):
+    """Retorna uma lista de IDs de usuários que já receberam a recompensa de uma meta."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT user_id FROM awarded_goals WHERE guild_id=? AND goal_id=?", (guild_id, goal_id))
+        rows = await cur.fetchall()
+        # Retorna uma lista de IDs, por exemplo: [12345, 67890]
+        return [r[0] for r in rows]

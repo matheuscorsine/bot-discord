@@ -3,13 +3,13 @@ from discord.ext import commands
 import asyncio
 import aiosqlite
 
-from core.database import (
+from ..core.database import (
     total_time, current_session_time, get_rank, list_goals, has_awarded
 )
-from utils.helpers import fetch_avatar_bytes
-from utils.image_generator import gerar_stats_card, gerar_leaderboard_card
-from utils.views import RankingView
-from config import DB_PATH, BOT_PREFIX
+from ..utils.helpers import fetch_avatar_bytes
+from ..utils.image_generator import gerar_stats_card, gerar_leaderboard_card
+from ..utils.views import RankingView
+from ..config import DB_PATH, BOT_PREFIX
 
 class GeneralCommands(commands.Cog):
     def __init__(self, bot):
