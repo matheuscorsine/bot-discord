@@ -1,5 +1,5 @@
 import aiosqlite
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Importa o caminho do banco de dados do nosso arquivo de configuração
 from config import DB_PATH
@@ -39,7 +39,15 @@ async def init_db():
         # Tabela para listar canais onde os comandos do bot são proibidos
         await db.execute("""CREATE TABLE IF NOT EXISTS prohibited_channels (
             guild_id INTEGER, channel_id INTEGER, PRIMARY KEY(guild_id, channel_id) )""")
+        # Tabela para armazenar o histórico semanal de tempo 
+        await db.execute("""CREATE TABLE IF NOT EXISTS weekly_time_history (
+            guild_id INTEGER, user_id INTEGER, total_seconds INTEGER, reset_date TEXT, pinned INTEGER DEFAULT 0, PRIMARY KEY(guild_id, user_id, reset_date))""")
+        # Tabela para configurar canais de log de metas e retenção de histórico
+        await db.execute("""CREATE TABLE IF NOT EXISTS history_config (
+            guild_id INTEGER PRIMARY KEY, post_channel_id INTEGER, retention_days INTEGER DEFAULT 90)""")
         await db.commit()
+
+
         
         # Tenta adicionar uma nova coluna à tabela 'goals' para compatibilidade com versões antigas.
         # Se a coluna já existir, a exceção será ignorada.
@@ -256,3 +264,79 @@ async def get_awarded_users(guild_id: int, goal_id: int):
         rows = await cur.fetchall()
         # Retorna uma lista de IDs, por exemplo: [12345, 67890]
         return [r[0] for r in rows]
+
+async def archive_weekly_times(guild_id, reset_date_iso):
+    """Copia os tempos atuais da tabela total_times para a tabela de histórico."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id, total_seconds FROM total_times WHERE guild_id=?", (guild_id,))
+        rows = await cursor.fetchall()
+
+        if not rows:
+            return
+
+        to_insert = [(guild_id, user_id, total_seconds, reset_date_iso) for user_id, total_seconds in rows]
+        await db.executemany("INSERT OR REPLACE INTO weekly_time_history (guild_id, user_id, total_seconds, reset_date) VALUES (?, ?, ?, ?)", to_insert)
+        await db.commit()
+
+async def get_weekly_history(guild_id):
+    """Busca o ranking da última semana arquivada."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT MAX(reset_date) FROM weekly_time_history WHERE guild_id=?", (guild_id,))
+        latest_date_row = await cursor.fetchone()
+        
+        if not latest_date_row or not latest_date_row[0]:
+            return None, []
+
+        latest_date = latest_date_row[0]
+        cursor = await db.execute("SELECT user_id, total_seconds FROM weekly_time_history WHERE guild_id=? AND reset_date=? ORDER BY total_seconds DESC", (guild_id, latest_date))
+        rows = await cursor.fetchall()
+        return latest_date, rows
+
+async def set_history_config(guild_id: int, channel_id: int, retention_days: int):
+    """Define ou atualiza as configurações do histórico semanal."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR REPLACE INTO history_config (guild_id, post_channel_id, retention_days) VALUES (?, ?, ?)",
+                         (guild_id, channel_id, retention_days))
+        await db.commit()
+
+async def get_history_config(guild_id: int):
+    """Busca as configurações do histórico semanal."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT post_channel_id, retention_days FROM history_config WHERE guild_id=?", (guild_id,))
+        return await cursor.fetchone()
+
+async def get_all_history_dates(guild_id: int):
+    """Retorna uma lista de todas as datas de reset arquivadas."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT DISTINCT reset_date FROM weekly_time_history WHERE guild_id=? ORDER BY reset_date DESC", (guild_id,))
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+async def get_history_by_date(guild_id: int, reset_date_iso: str):
+    """Busca o ranking de uma data específica."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id, total_seconds FROM weekly_time_history WHERE guild_id=? AND reset_date=? ORDER BY total_seconds DESC", (guild_id, reset_date_iso))
+        return await cursor.fetchall()
+
+async def toggle_pin_history(guild_id: int, reset_date_iso: str, pin_status: bool):
+    """Fixa ou desafixa um registro de histórico semanal."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE weekly_time_history SET pinned = ? WHERE guild_id=? AND reset_date=?",
+                         (1 if pin_status else 0, guild_id, reset_date_iso))
+        await db.commit()
+
+async def cleanup_old_history(guild_id: int, retention_days: int):
+    """Apaga registros de histórico mais antigos que o período de retenção que não estão fixados."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # A data limite é calculada em TEXT no formato ISO, que é comparável
+        limit_date = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+        await db.execute("DELETE FROM weekly_time_history WHERE guild_id=? AND reset_date < ? AND pinned = 0",
+                         (guild_id, limit_date))
+        await db.commit()
+
+async def get_active_sessions(guild_id: int):
+    """Retorna todas as sessões de voz ativas para uma guilda."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id FROM sessions WHERE guild_id=?", (guild_id,))
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
