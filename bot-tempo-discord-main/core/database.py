@@ -45,6 +45,13 @@ async def init_db():
         # Tabela para configurar canais de log de metas e retenção de histórico
         await db.execute("""CREATE TABLE IF NOT EXISTS history_config (
             guild_id INTEGER PRIMARY KEY, post_channel_id INTEGER, retention_days INTEGER DEFAULT 90)""")
+        # Tabela para armazenar os sorteios ativos
+        await db.execute("""CREATE TABLE IF NOT EXISTS giveaways (
+            message_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, end_time TEXT NOT NULL, winner_count INTEGER NOT NULL,
+            prize TEXT,required_roles TEXT)""")
+        # Tabela para armazenar os participantes de cada sorteio
+        await db.execute("""CREATE TABLE IF NOT EXISTS giveaway_participants (
+            message_id INTEGER, user_id INTEGER, PRIMARY KEY (message_id, user_id))""")
         await db.commit()
 
 
@@ -58,46 +65,48 @@ async def init_db():
             pass
 
 async def start_session(user_id, guild_id, channel_id, start_time_iso):
-    """Inicia e registra uma nova sessão de tempo para um usuário no banco de dados."""
+    """Inicia uma nova sessão de voz para um usuário."""
+    print(f"[DEBUG-TEMPO] start_session chamada para user: {user_id}") # DEBUG
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("INSERT OR REPLACE INTO sessions (user_id,guild_id,channel_id,start_time) VALUES (?,?,?,?)",
+        await db.execute("INSERT OR REPLACE INTO sessions (user_id, guild_id, channel_id, start_time) VALUES (?, ?, ?, ?)",
                          (user_id, guild_id, channel_id, start_time_iso))
         await db.commit()
+    print(f"[DEBUG-TEMPO] Sessão para user {user_id} inserida no banco de dados.")
 
 async def end_session(user_id, guild_id, end_time_iso):
     """Finaliza uma sessão, calcula a duração e a adiciona ao tempo total do usuário."""
-    start_iso, new_total = None, None
+    start_iso = None
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("SELECT start_time FROM sessions WHERE user_id=? AND guild_id=?", (user_id, guild_id))
         row = await cur.fetchone()
-        if not row: return None
+        if not row:
+            return None
         
         start_iso = row[0]
         try:
-            start_dt = datetime.fromisoformat(start_iso)
-            end_dt = datetime.fromisoformat(end_time_iso)
-        except:
-            start_dt, end_dt = None, None
-        
-        if start_dt and end_dt:
+            # CORREÇÃO: Garante que a data/hora seja lida corretamente
+            start_dt = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_time_iso.replace('Z', '+00:00'))
             duration = int((end_dt - start_dt).total_seconds())
-            if duration < 0: duration = 0
+
+            if duration > 0:
+                # Busca o tempo total atual
+                cur2 = await db.execute("SELECT total_seconds FROM total_times WHERE user_id=? AND guild_id=?", (user_id, guild_id))
+                total_row = await cur2.fetchone()
+                current_total = total_row[0] if total_row else 0
+                
+                # Soma o novo tempo e salva
+                new_total = current_total + duration
+                await db.execute("INSERT OR REPLACE INTO total_times (user_id, guild_id, total_seconds) VALUES (?, ?, ?)",
+                                 (user_id, guild_id, new_total))
+        except (ValueError, TypeError) as e:
+            # Se houver um erro no cálculo, pelo menos não perdemos a sessão
+            print(f"AVISO: Não foi possível calcular a duração da sessão para {user_id}. Erro: {e}")
+
+        # Remove a sessão ativa, pois ela já foi processada
+        await db.execute("DELETE FROM sessions WHERE user_id=? AND guild_id=?", (user_id, guild_id))
+        await db.commit()
             
-            cur2 = await db.execute("SELECT total_seconds FROM total_times WHERE user_id=? AND guild_id=?", (user_id, guild_id))
-            total_row = await cur2.fetchone()
-            
-            if total_row:
-                new_total = int(total_row[0]) + duration
-                await db.execute("UPDATE total_times SET total_seconds=? WHERE user_id=? AND guild_id=?", (new_total, user_id, guild_id))
-            else:
-                new_total = duration
-                await db.execute("INSERT INTO total_times (user_id,guild_id,total_seconds) VALUES (?,?,?)", (user_id, guild_id, new_total))
-            
-            await db.execute("DELETE FROM sessions WHERE user_id=? AND guild_id=?", (user_id, guild_id))
-            await db.commit()
-            
-    # A chamada para _check_and_award_goals_for_user foi removida daqui.
-    # Ela será feita no manipulador de eventos on_voice_state_update.
     return start_iso
 
 async def total_time(user_id, guild_id):
@@ -340,3 +349,46 @@ async def get_active_sessions(guild_id: int):
         cursor = await db.execute("SELECT user_id FROM sessions WHERE guild_id=?", (guild_id,))
         rows = await cursor.fetchall()
         return [row[0] for row in rows]
+    
+async def add_giveaway(message_id, guild_id, channel_id, end_time, winner_count, prize, required_roles_csv):
+    """Adiciona um novo sorteio ao banco de dados."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO giveaways (message_id, guild_id, channel_id, end_time, winner_count, prize, required_roles) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (message_id, guild_id, channel_id, end_time.isoformat(), winner_count, prize, required_roles_csv)
+        )
+        await db.commit()
+
+async def remove_giveaway(message_id):
+    """Remove um sorteio e seus participantes do banco de dados."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM giveaways WHERE message_id=?", (message_id,))
+        await db.execute("DELETE FROM giveaway_participants WHERE message_id=?", (message_id,))
+        await db.commit()
+
+async def add_giveaway_participant(message_id, user_id):
+    """Adiciona um participante a um sorteio."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO giveaway_participants (message_id, user_id) VALUES (?, ?)", (message_id, user_id))
+        await db.commit()
+
+async def get_giveaway_participants(message_id):
+    """Retorna uma lista de todos os participantes de um sorteio."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id FROM giveaway_participants WHERE message_id=?", (message_id,))
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+async def get_active_giveaways():
+    """Retorna todos os sorteios que ainda não terminaram."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await db.execute("SELECT * FROM giveaways WHERE end_time > ?", (now,))
+        return await cursor.fetchall()
+
+async def get_finished_giveaways():
+    """Retorna todos os sorteios cujo tempo já acabou."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await db.execute("SELECT * FROM giveaways WHERE end_time <= ?", (now,))
+        return await cursor.fetchall()

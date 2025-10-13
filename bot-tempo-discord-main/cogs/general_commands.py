@@ -17,40 +17,37 @@ class GeneralCommands(commands.Cog):
 
     @commands.command(name="tempo", aliases=['t'])
     async def tempo_cmd(self, ctx, user: discord.Member = None):
-        """Mostra o cartão de estatísticas de tempo de um usuário."""
-        # Se nenhum usuário for mencionado, usa o autor do comando
+        """Mostra o cartão de estatísticas de tempo para um usuário."""
         user = user or ctx.author
-        
-        # Busca os dados de tempo do banco de dados
-        total = await total_time(user.id, ctx.guild.id)
-        current = await current_session_time(user.id, ctx.guild.id)
-        rank = await get_rank(user.id, ctx.guild.id)
-        
-        # Coleta os dados das metas para exibir no cartão
-        goals_rows = await list_goals(ctx.guild.id)
-        goals = []
-        if goals_rows:
-            for r in goals_rows:
-                gid, gname, greq, _, _, _, _ = r
-                awarded = await has_awarded(user.id, ctx.guild.id, gid)
-                effective = int(total or 0) + int(current or 0)
-                prog = min(1.0, effective / greq) if greq and greq > 0 else 1.0
-                goals.append({'id': gid, 'name': gname, 'required': greq, 'awarded': bool(awarded), 'progress': prog})
-
-        # Baixa o avatar do usuário
-        avatar_bytes = await fetch_avatar_bytes(self.bot.http_session, str(user.display_avatar.url))
-        
         try:
-            # Gera a imagem do cartão em uma thread separada para não bloquear o bot
+            total = await total_time(user.id, ctx.guild.id)
+            current = await current_session_time(user.id, ctx.guild.id)
+            rank = await get_rank(user.id, ctx.guild.id)
+
+            # --- LÓGICA DE METAS ADICIONADA AQUI ---
+            goals_rows = await list_goals(ctx.guild.id)
+            goals = []
+            if goals_rows:
+                effective_time = total + current
+                for r in goals_rows:
+                    gid, gname, greq, _, _, _, _ = r
+                    awarded = await has_awarded(user.id, ctx.guild.id, gid)
+                    greq_i = int(greq or 0)
+                    prog = min(1.0, effective_time / greq_i) if greq_i > 0 else 0.0
+                    goals.append({'id': gid, 'name': gname, 'required': greq_i, 'awarded': bool(awarded), 'progress': prog})
+            
+            avatar_bytes = await fetch_avatar_bytes(str(user.display_avatar.url))
+            
             loop = asyncio.get_running_loop()
             buf = await loop.run_in_executor(None, gerar_stats_card,
                 user.display_name, total, current, avatar_bytes, rank, goals
             )
-            # Envia a imagem como resposta
-            await ctx.reply(file=discord.File(fp=buf, filename=f"tempo_{user.id}.png"))
+            await ctx.reply(file=discord.File(fp=buf, filename=f"tempo_{user.id}.png"), mention_author=True)
+
         except Exception as e:
-            await ctx.reply("Erro ao gerar o cartão de tempo.", mention_author=True)
+            await ctx.reply("❌ Erro ao gerar o cartão de tempo.", mention_author=True)
             print(f"Erro no !tempo: {e}")
+            traceback.print_exc()
 
     @commands.command(name="top_tempo", aliases=['top_time', 'top_ranking', 'top'])
     async def top_tempo_cmd(self, ctx):
