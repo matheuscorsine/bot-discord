@@ -10,7 +10,7 @@ from core.database import (
     start_session, end_session, get_log_channel, total_time,
     current_session_time, get_rank, list_goals, has_awarded
 )
-from core.logic import _check_and_award_goals_for_user
+from core.logic import check_and_award_goals_for_user
 from utils.helpers import fetch_avatar_bytes, fmt_hms, now_iso_utc
 from utils.image_generator import gerar_stats_card
 
@@ -40,7 +40,7 @@ class Listeners(commands.Cog):
                 start_iso = await end_session(member.id, guild.id, now)
                 
                 # --- CORREÇÃO 2: Verificação de metas ao sair ---
-                await _check_and_award_goals_for_user(self.bot, member.id, guild.id)
+                await check_and_award_goals_for_user(self.bot, member.id, guild.id)
 
                 if start_iso:
                     duration = 0
@@ -138,7 +138,7 @@ class Listeners(commands.Cog):
                     member = guild.get_member(user_id)
                     if member:
                         # A verificação periódica de metas já acontece aqui
-                        await _check_and_award_goals_for_user(self.bot, user_id, guild.id)
+                        await check_and_award_goals_for_user(self.bot, user_id, guild.id)
                         await self._ensure_user_call_message(member)
                 
                 guild_map = self.active_call_messages.get(guild.id, {})
