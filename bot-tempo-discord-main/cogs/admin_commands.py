@@ -5,14 +5,17 @@ import traceback
 import asyncio
 
 from config import BOT_PREFIX
+from datetime import datetime, timezone
 from core.database import (
     set_log_channel, add_goal, remove_goal, list_goals, get_goal, mark_awarded,
     set_reset_config, get_reset_config, total_time, current_session_time,
     add_prohibited_channel, remove_prohibited_channel, list_prohibited_channels,
-    get_awarded_users, update_goal_reset_flag, get_log_channel
+    get_awarded_users, update_goal_reset_flag, get_log_channel,
+    set_history_config, get_all_history_dates, get_history_by_date, toggle_pin_history
 )
 from core.scheduler import _weekly_reset_run_for_guild, _parse_day
 from utils.helpers import fmt_hms, human_hours_minutes
+from utils.image_generator import gerar_leaderboard_card
 
 class AdminCommands(commands.Cog):
     def __init__(self, bot):
@@ -198,7 +201,7 @@ class AdminCommands(commands.Cog):
     @commands.command(name="forcereset")
     async def forcereset_cmd(self, ctx):
         await ctx.reply("Forçando o reset semanal... Isso pode levar um momento.", mention_author=True)
-        await _weekly_reset_run_for_guild(ctx.guild)
+        await _weekly_reset_run_for_guild(ctx.guild, self.bot)
         await ctx.send("Reset forçado executado com sucesso.")
 
     @commands.has_permissions(administrator=True)
@@ -277,11 +280,95 @@ class AdminCommands(commands.Cog):
         await ctx.reply("Canais proibidos para comandos de membros:\n" + "\n".join(mentions), mention_author=True)
 
     @commands.has_permissions(administrator=True)
+<<<<<<< HEAD
     @commands.command(name="setcanalreset")
     async def set_reset_channel_cmd(self, ctx, canal: discord.TextChannel):
         """Define o canal para receber a notificação de reset semanal."""
         await set_log_channel(ctx.guild.id, canal.id, "resetlog")
         await ctx.reply(f"✅ O canal {canal.mention} foi definido para receber as notificações de reset semanal.", mention_author=True)
+=======
+    @commands.command(name="set_historico", aliases=["sethistory"])
+    async def set_history_cmd(self, ctx, canal: discord.TextChannel, dias_para_manter: int = 90):
+        """Define o canal para postagem automática do ranking e por quantos dias o histórico é mantido."""
+        await set_history_config(ctx.guild.id, canal.id, dias_para_manter)
+        await ctx.reply(f"✅ Configuração do histórico salva!\n- Rankings semanais serão postados em: {canal.mention}\n- Histórico será mantido por: **{dias_para_manter} dias**.", mention_author=True)
+
+    @commands.has_permissions(administrator=True)
+    @commands.command(name="historico", aliases=["history"])
+    async def history_cmd(self, ctx, data: str = None):
+        """Exibe o ranking de uma semana passada. Se nenhuma data for fornecida, lista as disponíveis."""
+        dates = await get_all_history_dates(ctx.guild.id)
+        if not dates:
+            await ctx.reply("Nenhum histórico semanal foi encontrado.", mention_author=True)
+            return
+
+        if data is None:
+            formatted_dates = []
+            for iso_date in dates[:15]:
+                try:
+                    dt_obj = datetime.fromisoformat(iso_date.replace('Z', '+00:00'))
+                    formatted_dates.append(f"`{dt_obj.strftime('%Y-%m-%d')}`")
+                except:
+                    continue
+            
+            embed = discord.Embed(title="🗓️ Histórico de Rankings Semanais",
+                                  description="Use `!historico <data>` com uma das datas abaixo (formato AAAA-MM-DD).\n\n" + "\n".join(formatted_dates),
+                                  color=discord.Color.blue())
+            await ctx.reply(embed=embed, mention_author=True)
+            return
+
+        # Busca a data mais próxima da fornecida pelo usuário
+        target_date_iso = None
+        for iso_date in dates:
+            if iso_date.startswith(data):
+                target_date_iso = iso_date
+                break
+        
+        if not target_date_iso:
+            await ctx.reply(f"❌ Data não encontrada. Use o formato `AAAA-MM-DD` de uma das datas listadas em `!historico`.", mention_author=True)
+            return
+
+        rows = await get_history_by_date(ctx.guild.id, target_date_iso)
+        if not rows:
+            await ctx.reply(f"Não foram encontrados dados para a data `{data}`.", mention_author=True)
+            return
+
+        loop = asyncio.get_running_loop()
+        buf = await loop.run_in_executor(None, gerar_leaderboard_card, rows, ctx.guild, 1)
+        
+        dt_obj = datetime.fromisoformat(target_date_iso.replace('Z', '+00:00'))
+        await ctx.reply(
+            content=f"**Exibindo ranking da semana de {dt_obj.strftime('%d/%m/%Y')}**",
+            file=discord.File(fp=buf, filename=f"historico_{data}.png"),
+            mention_author=True
+        )
+
+    @commands.has_permissions(administrator=True)
+    @commands.command(name="fixar_historico", aliases=["pinhistory"])
+    async def pin_history_cmd(self, ctx, data: str):
+        """Impede que o ranking de uma semana específica seja apagado automaticamente."""
+        dates = await get_all_history_dates(ctx.guild.id)
+        target_date_iso = next((d for d in dates if d.startswith(data)), None)
+        if not target_date_iso:
+            await ctx.reply(f"❌ Data não encontrada. Use o formato `AAAA-MM-DD`.", mention_author=True)
+            return
+        
+        await toggle_pin_history(ctx.guild.id, target_date_iso, True)
+        await ctx.reply(f"📌 O histórico da semana `{data}` foi fixado e não será apagado automaticamente.", mention_author=True)
+
+    @commands.has_permissions(administrator=True)
+    @commands.command(name="desafixar_historico", aliases=["unpinhistory"])
+    async def unpin_history_cmd(self, ctx, data: str):
+        """Permite que o ranking de uma semana específica volte a ser apagado após o tempo de retenção."""
+        dates = await get_all_history_dates(ctx.guild.id)
+        target_date_iso = next((d for d in dates if d.startswith(data)), None)
+        if not target_date_iso:
+            await ctx.reply(f"❌ Data não encontrada. Use o formato `AAAA-MM-DD`.", mention_author=True)
+            return
+        
+        await toggle_pin_history(ctx.guild.id, target_date_iso, False)
+        await ctx.reply(f"🔓 O histórico da semana `{data}` foi desafixado.", mention_author=True)
+>>>>>>> 25ef76a395daef396a31e04fbabb33c249b193da
 
 # Função obrigatória que permite que o bot carregue este Cog
 async def setup(bot):

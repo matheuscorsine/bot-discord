@@ -1,5 +1,5 @@
 import aiosqlite
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Importa o caminho do banco de dados do nosso arquivo de configuração
 from config import DB_PATH
@@ -39,10 +39,28 @@ async def init_db():
         # Tabela para listar canais onde os comandos do bot são proibidos
         await db.execute("""CREATE TABLE IF NOT EXISTS prohibited_channels (
             guild_id INTEGER, channel_id INTEGER, PRIMARY KEY(guild_id, channel_id) )""")
+        # Tabela para armazenar o histórico semanal de tempo 
+        await db.execute("""CREATE TABLE IF NOT EXISTS weekly_time_history (
+            guild_id INTEGER, user_id INTEGER, total_seconds INTEGER, reset_date TEXT, pinned INTEGER DEFAULT 0, PRIMARY KEY(guild_id, user_id, reset_date))""")
+        # Tabela para configurar canais de log de metas e retenção de histórico
+        await db.execute("""CREATE TABLE IF NOT EXISTS history_config (
+            guild_id INTEGER PRIMARY KEY, post_channel_id INTEGER, retention_days INTEGER DEFAULT 90)""")
+        # Tabela para armazenar os sorteios ativos
+        await db.execute("""CREATE TABLE IF NOT EXISTS giveaways (
+            message_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, end_time TEXT NOT NULL, winner_count INTEGER NOT NULL,
+            prize TEXT,required_roles TEXT)""")
+        # Tabela para armazenar os participantes de cada sorteio
+        await db.execute("""CREATE TABLE IF NOT EXISTS giveaway_participants (
+            message_id INTEGER, user_id INTEGER, PRIMARY KEY (message_id, user_id))""")
         await db.commit()
+<<<<<<< HEAD
         #tabela de histórico
         await db.execute("""CREATE TABLE IF NOT EXISTS weekly_time_history (
             guild_id INTEGER, user_id INTEGER, total_seconds INTEGER, PRIMARY KEY(guild_id, user_id))""")
+=======
+
+
+>>>>>>> 25ef76a395daef396a31e04fbabb33c249b193da
         
         # Tenta adicionar uma nova coluna à tabela 'goals' para compatibilidade com versões antigas.
         # Se a coluna já existir, a exceção será ignorada.
@@ -53,46 +71,48 @@ async def init_db():
             pass
 
 async def start_session(user_id, guild_id, channel_id, start_time_iso):
-    """Inicia e registra uma nova sessão de tempo para um usuário no banco de dados."""
+    """Inicia uma nova sessão de voz para um usuário."""
+    print(f"[DEBUG-TEMPO] start_session chamada para user: {user_id}") # DEBUG
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("INSERT OR REPLACE INTO sessions (user_id,guild_id,channel_id,start_time) VALUES (?,?,?,?)",
+        await db.execute("INSERT OR REPLACE INTO sessions (user_id, guild_id, channel_id, start_time) VALUES (?, ?, ?, ?)",
                          (user_id, guild_id, channel_id, start_time_iso))
         await db.commit()
+    print(f"[DEBUG-TEMPO] Sessão para user {user_id} inserida no banco de dados.")
 
 async def end_session(user_id, guild_id, end_time_iso):
     """Finaliza uma sessão, calcula a duração e a adiciona ao tempo total do usuário."""
-    start_iso, new_total = None, None
+    start_iso = None
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("SELECT start_time FROM sessions WHERE user_id=? AND guild_id=?", (user_id, guild_id))
         row = await cur.fetchone()
-        if not row: return None
+        if not row:
+            return None
         
         start_iso = row[0]
         try:
-            start_dt = datetime.fromisoformat(start_iso)
-            end_dt = datetime.fromisoformat(end_time_iso)
-        except:
-            start_dt, end_dt = None, None
-        
-        if start_dt and end_dt:
+            # CORREÇÃO: Garante que a data/hora seja lida corretamente
+            start_dt = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_time_iso.replace('Z', '+00:00'))
             duration = int((end_dt - start_dt).total_seconds())
-            if duration < 0: duration = 0
+
+            if duration > 0:
+                # Busca o tempo total atual
+                cur2 = await db.execute("SELECT total_seconds FROM total_times WHERE user_id=? AND guild_id=?", (user_id, guild_id))
+                total_row = await cur2.fetchone()
+                current_total = total_row[0] if total_row else 0
+                
+                # Soma o novo tempo e salva
+                new_total = current_total + duration
+                await db.execute("INSERT OR REPLACE INTO total_times (user_id, guild_id, total_seconds) VALUES (?, ?, ?)",
+                                 (user_id, guild_id, new_total))
+        except (ValueError, TypeError) as e:
+            # Se houver um erro no cálculo, pelo menos não perdemos a sessão
+            print(f"AVISO: Não foi possível calcular a duração da sessão para {user_id}. Erro: {e}")
+
+        # Remove a sessão ativa, pois ela já foi processada
+        await db.execute("DELETE FROM sessions WHERE user_id=? AND guild_id=?", (user_id, guild_id))
+        await db.commit()
             
-            cur2 = await db.execute("SELECT total_seconds FROM total_times WHERE user_id=? AND guild_id=?", (user_id, guild_id))
-            total_row = await cur2.fetchone()
-            
-            if total_row:
-                new_total = int(total_row[0]) + duration
-                await db.execute("UPDATE total_times SET total_seconds=? WHERE user_id=? AND guild_id=?", (new_total, user_id, guild_id))
-            else:
-                new_total = duration
-                await db.execute("INSERT INTO total_times (user_id,guild_id,total_seconds) VALUES (?,?,?)", (user_id, guild_id, new_total))
-            
-            await db.execute("DELETE FROM sessions WHERE user_id=? AND guild_id=?", (user_id, guild_id))
-            await db.commit()
-            
-    # A chamada para _check_and_award_goals_for_user foi removida daqui.
-    # Ela será feita no manipulador de eventos on_voice_state_update.
     return start_iso
 
 async def total_time(user_id, guild_id):
@@ -260,12 +280,18 @@ async def get_awarded_users(guild_id: int, goal_id: int):
         # Retorna uma lista de IDs, por exemplo: [12345, 67890]
         return [r[0] for r in rows]
 
+<<<<<<< HEAD
 async def save_last_week_ranking(guild_id: int):
     """Salva o ranking atual como o ranking da última semana, apagando o anterior."""
+=======
+async def archive_weekly_times(guild_id, reset_date_iso):
+    """Copia os tempos atuais da tabela total_times para a tabela de histórico."""
+>>>>>>> 25ef76a395daef396a31e04fbabb33c249b193da
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("SELECT user_id, total_seconds FROM total_times WHERE guild_id=?", (guild_id,))
         rows = await cursor.fetchall()
 
+<<<<<<< HEAD
         # Limpa o histórico antigo e insere o novo de uma vez (transação)
         await db.execute("DELETE FROM weekly_time_history WHERE guild_id=?", (guild_id,))
         if rows:
@@ -277,4 +303,117 @@ async def get_last_week_ranking(guild_id: int):
     """Busca o ranking da última semana salva."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("SELECT user_id, total_seconds FROM weekly_time_history WHERE guild_id=? ORDER BY total_seconds DESC", (guild_id,))
+=======
+        if not rows:
+            return
+
+        to_insert = [(guild_id, user_id, total_seconds, reset_date_iso) for user_id, total_seconds in rows]
+        await db.executemany("INSERT OR REPLACE INTO weekly_time_history (guild_id, user_id, total_seconds, reset_date) VALUES (?, ?, ?, ?)", to_insert)
+        await db.commit()
+
+async def get_weekly_history(guild_id):
+    """Busca o ranking da última semana arquivada."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT MAX(reset_date) FROM weekly_time_history WHERE guild_id=?", (guild_id,))
+        latest_date_row = await cursor.fetchone()
+        
+        if not latest_date_row or not latest_date_row[0]:
+            return None, []
+
+        latest_date = latest_date_row[0]
+        cursor = await db.execute("SELECT user_id, total_seconds FROM weekly_time_history WHERE guild_id=? AND reset_date=? ORDER BY total_seconds DESC", (guild_id, latest_date))
+        rows = await cursor.fetchall()
+        return latest_date, rows
+
+async def set_history_config(guild_id: int, channel_id: int, retention_days: int):
+    """Define ou atualiza as configurações do histórico semanal."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR REPLACE INTO history_config (guild_id, post_channel_id, retention_days) VALUES (?, ?, ?)",
+                         (guild_id, channel_id, retention_days))
+        await db.commit()
+
+async def get_history_config(guild_id: int):
+    """Busca as configurações do histórico semanal."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT post_channel_id, retention_days FROM history_config WHERE guild_id=?", (guild_id,))
+        return await cursor.fetchone()
+
+async def get_all_history_dates(guild_id: int):
+    """Retorna uma lista de todas as datas de reset arquivadas."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT DISTINCT reset_date FROM weekly_time_history WHERE guild_id=? ORDER BY reset_date DESC", (guild_id,))
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+async def get_history_by_date(guild_id: int, reset_date_iso: str):
+    """Busca o ranking de uma data específica."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id, total_seconds FROM weekly_time_history WHERE guild_id=? AND reset_date=? ORDER BY total_seconds DESC", (guild_id, reset_date_iso))
+        return await cursor.fetchall()
+
+async def toggle_pin_history(guild_id: int, reset_date_iso: str, pin_status: bool):
+    """Fixa ou desafixa um registro de histórico semanal."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE weekly_time_history SET pinned = ? WHERE guild_id=? AND reset_date=?",
+                         (1 if pin_status else 0, guild_id, reset_date_iso))
+        await db.commit()
+
+async def cleanup_old_history(guild_id: int, retention_days: int):
+    """Apaga registros de histórico mais antigos que o período de retenção que não estão fixados."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # A data limite é calculada em TEXT no formato ISO, que é comparável
+        limit_date = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+        await db.execute("DELETE FROM weekly_time_history WHERE guild_id=? AND reset_date < ? AND pinned = 0",
+                         (guild_id, limit_date))
+        await db.commit()
+
+async def get_active_sessions(guild_id: int):
+    """Retorna todas as sessões de voz ativas para uma guilda."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id FROM sessions WHERE guild_id=?", (guild_id,))
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+    
+async def add_giveaway(message_id, guild_id, channel_id, end_time, winner_count, prize, required_roles_csv):
+    """Adiciona um novo sorteio ao banco de dados."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO giveaways (message_id, guild_id, channel_id, end_time, winner_count, prize, required_roles) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (message_id, guild_id, channel_id, end_time.isoformat(), winner_count, prize, required_roles_csv)
+        )
+        await db.commit()
+
+async def remove_giveaway(message_id):
+    """Remove um sorteio e seus participantes do banco de dados."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM giveaways WHERE message_id=?", (message_id,))
+        await db.execute("DELETE FROM giveaway_participants WHERE message_id=?", (message_id,))
+        await db.commit()
+
+async def add_giveaway_participant(message_id, user_id):
+    """Adiciona um participante a um sorteio."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO giveaway_participants (message_id, user_id) VALUES (?, ?)", (message_id, user_id))
+        await db.commit()
+
+async def get_giveaway_participants(message_id):
+    """Retorna uma lista de todos os participantes de um sorteio."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id FROM giveaway_participants WHERE message_id=?", (message_id,))
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+async def get_active_giveaways():
+    """Retorna todos os sorteios que ainda não terminaram."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await db.execute("SELECT * FROM giveaways WHERE end_time > ?", (now,))
+        return await cursor.fetchall()
+
+async def get_finished_giveaways():
+    """Retorna todos os sorteios cujo tempo já acabou."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await db.execute("SELECT * FROM giveaways WHERE end_time <= ?", (now,))
+>>>>>>> 25ef76a395daef396a31e04fbabb33c249b193da
         return await cursor.fetchall()

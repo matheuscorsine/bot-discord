@@ -110,7 +110,7 @@ def gerar_stats_card(username, total_seconds, current_seconds, avatar_bytes=None
         gap = int(h * 0.006)
         btn_x = bar_x + max(4, int(w * 0.004)); btn_y = bar_y - btn_h - gap
         btn_radius = max(6, btn_h // 2)
-        draw.rounded_rectangle((btn_x, btn_y, btn_x + btn_w, btn_y, + btn_h), radius=btn_radius, fill=BAR_BG_COLOR)
+        draw.rounded_rectangle((btn_x, btn_y, btn_x + btn_w, btn_y + btn_h), radius=btn_radius, fill=BAR_BG_COLOR)
         draw.text((btn_x + btn_w / 2, btn_y + btn_h / 2), display_text, font=btn_font, fill=TEXT_COLOR, anchor="mm")
 
         draw.rounded_rectangle((bar_x, bar_y, bar_x + bar_width, bar_y + bar_height), radius=radius, fill= BAR_BG_COLOR)
