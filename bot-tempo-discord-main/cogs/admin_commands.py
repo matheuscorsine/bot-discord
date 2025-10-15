@@ -276,6 +276,13 @@ class AdminCommands(commands.Cog):
         mentions = [f"<#{cid}>" for cid in ids]
         await ctx.reply("Canais proibidos para comandos de membros:\n" + "\n".join(mentions), mention_author=True)
 
+    @commands.has_permissions(administrator=True)
+    @commands.command(name="setcanalreset")
+    async def set_reset_channel_cmd(self, ctx, canal: discord.TextChannel):
+        """Define o canal para receber a notificação de reset semanal."""
+        await set_log_channel(ctx.guild.id, canal.id, "resetlog")
+        await ctx.reply(f"✅ O canal {canal.mention} foi definido para receber as notificações de reset semanal.", mention_author=True)
+
 # Função obrigatória que permite que o bot carregue este Cog
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))

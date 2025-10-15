@@ -4,7 +4,7 @@ import asyncio
 import aiosqlite
 
 from core.database import (
-    total_time, current_session_time, get_rank, list_goals, has_awarded
+    total_time, current_session_time, get_rank, list_goals, has_awarded, get_last_week_ranking
 )
 from utils.helpers import fetch_avatar_bytes
 from utils.image_generator import gerar_stats_card, gerar_leaderboard_card
@@ -112,6 +112,25 @@ class GeneralCommands(commands.Cog):
         """Alias para o comando !ajuda."""
         # Chama o outro comando de ajuda diretamente
         await self.member_help_cmd(ctx)
+
+    @commands.command(name="rankingsemanal", aliases=["lastweek"])
+    async def last_week_ranking_cmd(self, ctx):
+        """Mostra o ranking de tempo em call da última semana completa."""
+        await ctx.typing() # Mostra "Bot is typing..." para o usuário saber que está processando
+        rows = await get_last_week_ranking(ctx.guild.id)
+        
+        if not rows:
+            await ctx.reply("O ranking da semana passada ainda não está disponível.", mention_author=True)
+            return
+            
+        loop = asyncio.get_running_loop()
+        buf = await loop.run_in_executor(None, gerar_leaderboard_card, rows, ctx.guild, 1)
+        
+        await ctx.reply(
+            content="🏆 **Ranking Semanal** 🏆",
+            file=discord.File(fp=buf, filename="ranking_semanal_passado.png"),
+            mention_author=True
+        )
 
 # Função obrigatória que permite que o bot carregue este Cog
 async def setup(bot):

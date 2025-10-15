@@ -39,36 +39,39 @@ def _next_weekly_dt(now_utc: datetime, weekday: int, hour: int, minute: int):
     # Converte a data e hora do reset de volta para UTC para comparações consistentes
     return target_local.astimezone(timezone.utc)
 
-async def _weekly_reset_run_for_guild(guild: discord.Guild):
-    """Executa a lógica de reset para uma guilda específica."""
+async def _weekly_reset_run_for_guild(guild: discord.Guild, bot_instance):
     try:
-        rows = await list_goals(guild.id)
-        goallog_id = await get_log_channel(guild.id, "goallog")
-        ch = guild.get_channel(goallog_id) if goallog_id else None
+        now_utc = datetime.now(timezone.utc)
 
+        # Finaliza as sessões ativas para garantir que todo o tempo seja contado
+        active_user_ids = await get_active_sessions(guild.id)
+        for user_id in active_user_ids:
+            await end_session(user_id, guild.id, now_utc.isoformat())
+
+        # Salva o ranking final da semana que acabou (substituindo o antigo)
+        await save_last_week_ranking(guild.id)
+
+        # Reseta os tempos para a nova semana
+        rows_goals = await list_goals(guild.id)
         async with aiosqlite.connect(DB_PATH) as db:
-            # Apaga todos os registros de tempo total do servidor
             await db.execute("DELETE FROM total_times WHERE guild_id=?", (guild.id,))
-            
-            # Pega os IDs das metas que são configuradas para resetar semanalmente
-            resetable_goal_ids = [r[0] for r in rows if r and int(r[5]) == 1]
+            resetable_goal_ids = [r[0] for r in rows_goals if r and r[5] == 1]
             if resetable_goal_ids:
-                # Cria uma string de placeholders (?,?,?) para a query SQL
                 qmarks = ",".join("?" for _ in resetable_goal_ids)
-                # Apaga os registros de premiação apenas para as metas resetáveis
                 await db.execute(f"DELETE FROM awarded_goals WHERE guild_id=? AND goal_id IN ({qmarks})", (guild.id, *resetable_goal_ids))
-            
             await db.commit()
         
-        # Envia uma notificação no canal de log, se configurado
-        if ch:
-            await ch.send("🔁 Reset semanal executado. O tempo de voz de todos os membros foi zerado.")
-        
-        # Registra a data e hora do reset no banco de dados para evitar execuções duplicadas
-        await set_last_reset(guild.id, datetime.now(timezone.utc))
-        print(f"[reset] Reset executado para a guilda {guild.id} ({guild.name}).")
+        # Envia a notificação de reset no canal configurado
+        log_channel_id = await get_log_channel(guild.id, "resetlog")
+        if log_channel_id:
+            channel = guild.get_channel(log_channel_id)
+            if channel:
+                await channel.send("🔁 **O ranking semanal de tempo em call foi resetado!**\nUse `!rankingsemanal` para ver os resultados finais da última semana.")
+
+        await set_last_reset(guild.id, now_utc)
+        print(f"[reset] Reset e arquivamento simplificado executados para a guilda {guild.id} ({guild.name}).")
     except Exception as e:
-        print(f"[reset] Erro ao executar reset para a guilda {getattr(guild,'id',None)}: {e}")
+        print(f"[reset] Erro ao executar o reset para a guilda {getattr(guild,'id',None)}: {e}")
         traceback.print_exc()
 
 async def weekly_reset_scheduler(bot):

@@ -40,6 +40,9 @@ async def init_db():
         await db.execute("""CREATE TABLE IF NOT EXISTS prohibited_channels (
             guild_id INTEGER, channel_id INTEGER, PRIMARY KEY(guild_id, channel_id) )""")
         await db.commit()
+        #tabela de histórico
+        await db.execute("""CREATE TABLE IF NOT EXISTS weekly_time_history (
+            guild_id INTEGER, user_id INTEGER, total_seconds INTEGER, PRIMARY KEY(guild_id, user_id))""")
         
         # Tenta adicionar uma nova coluna à tabela 'goals' para compatibilidade com versões antigas.
         # Se a coluna já existir, a exceção será ignorada.
@@ -256,3 +259,22 @@ async def get_awarded_users(guild_id: int, goal_id: int):
         rows = await cur.fetchall()
         # Retorna uma lista de IDs, por exemplo: [12345, 67890]
         return [r[0] for r in rows]
+
+async def save_last_week_ranking(guild_id: int):
+    """Salva o ranking atual como o ranking da última semana, apagando o anterior."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id, total_seconds FROM total_times WHERE guild_id=?", (guild_id,))
+        rows = await cursor.fetchall()
+
+        # Limpa o histórico antigo e insere o novo de uma vez (transação)
+        await db.execute("DELETE FROM weekly_time_history WHERE guild_id=?", (guild_id,))
+        if rows:
+            to_insert = [(guild_id, user_id, total_seconds) for user_id, total_seconds in rows]
+            await db.executemany("INSERT INTO weekly_time_history (guild_id, user_id, total_seconds) VALUES (?, ?, ?)", to_insert)
+        await db.commit()
+
+async def get_last_week_ranking(guild_id: int):
+    """Busca o ranking da última semana salva."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT user_id, total_seconds FROM weekly_time_history WHERE guild_id=? ORDER BY total_seconds DESC", (guild_id,))
+        return await cursor.fetchall()
