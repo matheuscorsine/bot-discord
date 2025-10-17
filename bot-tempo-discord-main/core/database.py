@@ -53,15 +53,9 @@ async def init_db():
         await db.execute("""CREATE TABLE IF NOT EXISTS giveaway_participants (
             message_id INTEGER, user_id INTEGER, PRIMARY KEY (message_id, user_id))""")
         await db.commit()
-<<<<<<< HEAD
         #tabela de histórico
         await db.execute("""CREATE TABLE IF NOT EXISTS weekly_time_history (
             guild_id INTEGER, user_id INTEGER, total_seconds INTEGER, PRIMARY KEY(guild_id, user_id))""")
-=======
-
-
->>>>>>> 25ef76a395daef396a31e04fbabb33c249b193da
-        
         # Tenta adicionar uma nova coluna à tabela 'goals' para compatibilidade com versões antigas.
         # Se a coluna já existir, a exceção será ignorada.
         try:
@@ -280,18 +274,17 @@ async def get_awarded_users(guild_id: int, goal_id: int):
         # Retorna uma lista de IDs, por exemplo: [12345, 67890]
         return [r[0] for r in rows]
 
-<<<<<<< HEAD
+
 async def save_last_week_ranking(guild_id: int):
     """Salva o ranking atual como o ranking da última semana, apagando o anterior."""
-=======
+
 async def archive_weekly_times(guild_id, reset_date_iso):
     """Copia os tempos atuais da tabela total_times para a tabela de histórico."""
->>>>>>> 25ef76a395daef396a31e04fbabb33c249b193da
+
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("SELECT user_id, total_seconds FROM total_times WHERE guild_id=?", (guild_id,))
         rows = await cursor.fetchall()
 
-<<<<<<< HEAD
         # Limpa o histórico antigo e insere o novo de uma vez (transação)
         await db.execute("DELETE FROM weekly_time_history WHERE guild_id=?", (guild_id,))
         if rows:
@@ -303,7 +296,6 @@ async def get_last_week_ranking(guild_id: int):
     """Busca o ranking da última semana salva."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("SELECT user_id, total_seconds FROM weekly_time_history WHERE guild_id=? ORDER BY total_seconds DESC", (guild_id,))
-=======
         if not rows:
             return
 
@@ -414,6 +406,5 @@ async def get_finished_giveaways():
     """Retorna todos os sorteios cujo tempo já acabou."""
     async with aiosqlite.connect(DB_PATH) as db:
         now = datetime.now(timezone.utc).isoformat()
-        cursor = await db.execute("SELECT * FROM giveaways WHERE end_time <= ?", (now,))
->>>>>>> 25ef76a395daef396a31e04fbabb33c249b193da
+        cursor = await db.execute("SELECT * FROM giveaways WHERE end_time <= ?", (now,))    
         return await cursor.fetchall()
